@@ -3,6 +3,24 @@ import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+} from "recharts";
+import {
   Github,
   BookOpen,
   Terminal,
@@ -16,19 +34,20 @@ import {
 
 const backendUrl = "http://127.0.0.1:8000";
 
+const COLORS = ["#FF8C00", "#FFB347", "#FFA500", "#FFD700", "#f59e0b"];
+
 function App() {
   const [gitUrl, setGitUrl] = useState("");
   const [localPath, setLocalPath] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [gitLoading, setGitLoading] = useState(false);
+  const [pathLoading, setPathLoading] = useState(false);
   const [content, setContent] = useState("");
   const [activePage, setActivePage] = useState("README.md");
   const [docsReady, setDocsReady] = useState(false);
-  const [traces, setTraces] = useState<string[]>([]);
-  const [showTraces, setShowTraces] = useState(false);
 
   const generateFromGit = async () => {
-    if (!gitUrl) return;
-    setLoading(true);
+    if (!gitUrl || pathLoading) return;
+    setGitLoading(true);
     try {
       const formData = new FormData();
       formData.append("git_url", gitUrl);
@@ -40,13 +59,13 @@ function App() {
       const errorMessage = error.response?.data?.error || error.message || "Unknown error";
       alert(`Failed to generate documentation: ${errorMessage}`);
     } finally {
-      setLoading(false);
+      setGitLoading(false);
     }
   };
 
   const generateFromPath = async () => {
-    if (!localPath) return;
-    setLoading(true);
+    if (!localPath || gitLoading) return;
+    setPathLoading(true);
     try {
       const formData = new FormData();
       formData.append("folder_path", localPath);
@@ -58,12 +77,11 @@ function App() {
       const errorMessage = error.response?.data?.error || error.message || "Unknown error";
       alert(`Failed to generate from path: ${errorMessage}`);
     } finally {
-      setLoading(false);
+      setPathLoading(false);
     }
   };
 
   const loadPage = async (page: string) => {
-    setShowTraces(false);
     setActivePage(page);
     try {
       const response = await axios.get(`${backendUrl}/docs-static/${page}`);
@@ -74,29 +92,130 @@ function App() {
     }
   };
 
-  const loadTraces = async () => {
-    setActivePage("traces");
-    setShowTraces(true);
-    setLoading(true);
-    try {
-      const response = await axios.get(`${backendUrl}/traces`);
-      setTraces(response.data.traces || []);
-    } catch (error) {
-      console.error("Error loading traces:", error);
-      alert("Failed to load execution traces.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const pages = [
     { id: "README.md", label: "Getting Started", icon: <BookOpen size={18} /> },
     { id: "API_REFERENCE.md", label: "API Reference", icon: <Terminal size={18} /> },
     { id: "ARCHITECTURE.md", label: "Architecture", icon: <Layout size={18} /> },
     { id: "EXAMPLES.md", label: "Usage Examples", icon: <Code size={18} /> },
     { id: "diagrams/architecture.mermaid", label: "Visual Flow", icon: <ChevronRight size={18} /> },
-    { id: "traces", label: "Execution Traces", icon: <Zap size={18} />, onClick: loadTraces },
   ];
+
+  const ChartRenderer = ({ type, data }: { type: string; data: any }) => {
+    if (!data) return null;
+
+    if (type === "file_dist" || type === "project_breadth") {
+      return (
+        <div className="chart-card" style={{ marginTop: "2rem", marginBottom: "2.5rem" }}>
+          <h3>{type === "file_dist" ? "File Type Distribution" : "Project Breadth"}</h3>
+          <div style={{ height: "300px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
+                  {data.map((_: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      );
+    }
+
+    if (type === "api_methods" || type === "endpoint_specs") {
+      return (
+        <div className="chart-card" style={{ marginTop: "2rem", marginBottom: "2.5rem" }}>
+          <h3>{type === "api_methods" ? "API Methods Breakdown" : "Endpoint Parameters Complexity"}</h3>
+          <div style={{ height: "300px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      );
+    }
+
+    if (type === "structural") {
+      return (
+        <div className="chart-card" style={{ marginTop: "2rem", marginBottom: "2.5rem" }}>
+          <h3>Project Structural Analysis</h3>
+          <div style={{ height: "300px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" />
+                <YAxis dataKey="name" type="category" width={100} />
+                <Tooltip />
+                <Bar dataKey="value" fill="var(--primary-light)" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      );
+    }
+
+    if (type === "quality") {
+      const evaluationData = Object.entries(data || {}).map(([key, value]) => ({
+        subject: key.replace(/_/g, " "),
+        A: value as number,
+        fullMark: 10,
+      }));
+
+      return (
+        <div className="chart-card" style={{ marginTop: "2rem", marginBottom: "2.5rem" }}>
+          <h3>Documentation Quality Score</h3>
+          <div style={{ height: "300px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={evaluationData}>
+                <PolarGrid />
+                <PolarAngleAxis dataKey="subject" />
+                <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                <Radar name="Score" dataKey="A" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.6} />
+                <Tooltip />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const MarkdownComponents = {
+    code({ node, inline, className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || "");
+      const content = String(children).replace(/\n$/, "");
+
+      if (!inline && match && match[1] === "chart") {
+        try {
+          const chartConfig = JSON.parse(content);
+          return <ChartRenderer type={chartConfig.type} data={chartConfig.data} />;
+        } catch (e) {
+          console.error("Failed to parse chart config:", e);
+          return <code>{content}</code>;
+        }
+      }
+
+      return !inline && match ? (
+        <pre className={className} {...props}>
+          <code>{children}</code>
+        </pre>
+      ) : (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    }
+  };
 
   return (
     <div className="app-container">
@@ -134,9 +253,15 @@ function App() {
                       placeholder="https://github.com/username/repo"
                       value={gitUrl}
                       onChange={(e) => setGitUrl(e.target.value)}
+                      disabled={gitLoading || pathLoading}
                     />
-                    <button className="btn-primary" onClick={generateFromGit} disabled={loading}>
-                      {loading ? <Zap size={18} className="animate-spin" /> : <Github size={18} />}
+                    <button
+                      className="btn-primary"
+                      onClick={generateFromGit}
+                      disabled={gitLoading || pathLoading || !gitUrl}
+                      style={{ opacity: pathLoading ? 0.5 : 1 }}
+                    >
+                      {gitLoading ? <Zap size={18} className="animate-spin" /> : <Github size={18} />}
                       Generate
                     </button>
                   </div>
@@ -158,9 +283,15 @@ function App() {
                       placeholder="/Users/username/project-folder"
                       value={localPath}
                       onChange={(e) => setLocalPath(e.target.value)}
+                      disabled={gitLoading || pathLoading}
                     />
-                    <button className="btn-primary" onClick={generateFromPath} disabled={loading}>
-                      {loading ? <Zap size={18} className="animate-spin" /> : <Terminal size={18} />}
+                    <button
+                      className="btn-primary"
+                      onClick={generateFromPath}
+                      disabled={gitLoading || pathLoading || !localPath}
+                      style={{ opacity: gitLoading ? 0.5 : 1 }}
+                    >
+                      {pathLoading ? <Zap size={18} className="animate-spin" /> : <Terminal size={18} />}
                       Generate
                     </button>
                   </div>
@@ -170,12 +301,12 @@ function App() {
                 </div>
               </div>
 
-              {loading && (
+              {(gitLoading || pathLoading) && (
                 <div style={{ marginTop: "2rem", color: "var(--primary)", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
                   <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
                     <Zap size={20} />
                   </motion.div>
-                  Analyzing codebase...
+                  {gitLoading ? "Cloning and analyzing repository..." : "Analyzing local codebase..."}
                 </div>
               )}
             </div>
@@ -205,7 +336,7 @@ function App() {
                   <div
                     key={page.id}
                     className={`nav-item ${activePage === page.id ? "active" : ""}`}
-                    onClick={() => loadPage(page.id)}
+                    onClick={() => (page as any).onClick ? (page as any).onClick() : loadPage(page.id)}
                   >
                     {page.icon}
                     {page.label}
@@ -214,14 +345,14 @@ function App() {
               </div>
             </div>
 
-            <div style={{ flex: 1, background: "white", minHeight: "100vh" }}>
+            <div style={{ flex: 1, background: "#f9fafb", minHeight: "100vh", overflowY: "auto" }}>
               <motion.div
                 key={activePage}
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="markdown-content"
               >
-                <ReactMarkdown>{content}</ReactMarkdown>
+                <ReactMarkdown components={MarkdownComponents}>{content}</ReactMarkdown>
               </motion.div>
             </div>
           </motion.div>
@@ -231,6 +362,48 @@ function App() {
       <style>{`
         .animate-spin { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        .stat-card {
+          background: white;
+          padding: 1.5rem;
+          border-radius: 1rem;
+          border: 1px solid var(--border);
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        .stat-icon {
+          width: 40px;
+          height: 40px;
+          background: var(--primary-light);
+          border-radius: 0.75rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 1rem;
+        }
+        .stat-value {
+          font-size: 1.5rem;
+          font-weight: 800;
+          color: var(--text);
+        }
+        .stat-label {
+          font-size: 0.875rem;
+          color: var(--text-muted);
+          font-weight: 600;
+        }
+        
+        .chart-card {
+          background: white;
+          padding: 1.5rem;
+          border-radius: 1rem;
+          border: 1px solid var(--border);
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        .chart-card h3 {
+          font-size: 1.125rem;
+          font-weight: 700;
+          margin-bottom: 1.5rem;
+          color: var(--text-main);
+        }
       `}</style>
     </div>
   );
